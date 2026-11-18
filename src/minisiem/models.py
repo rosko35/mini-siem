@@ -20,6 +20,11 @@ class EventType:
     SSH_FAILURES = frozenset({SSH_FAILED, SSH_INVALID_USER})
 
 
+BENIGN_404 = frozenset(
+    {"/favicon.ico", "/robots.txt", "/sitemap.xml", "/ads.txt", "/.well-known/security.txt"}
+)
+
+
 @dataclass(slots=True)
 class Event:
     """A single parsed log line.
@@ -55,7 +60,11 @@ class Event:
         if self.type in EventType.SSH_FAILURES or self.tags:
             return True
         status = self.fields.get("status")
-        return isinstance(status, int) and status in (400, 401, 403, 404, 405, 444)
+        if not isinstance(status, int) or status not in (400, 401, 403, 404, 405, 444):
+            return False
+        # Browsers and crawlers ask for these on every site; a 404 here means nothing.
+        path = str(self.fields.get("path", "")).split("?", 1)[0]
+        return path not in BENIGN_404 and not path.startswith("/apple-touch-icon")
 
 
 class Severity(IntEnum):

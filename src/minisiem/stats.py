@@ -51,12 +51,13 @@ def render_markdown(
     s = db.summary(since)
     users = db.top_users(since, limit)
     ips = db.top_ips(since, limit)
-    countries = [c for c in db.countries(since)][:limit]
+    all_countries = db.countries(since)
+    countries = all_countries[:limit]
     rules = db.alerts_by_rule(since)
 
     first = s["first_event"]
     period_start = max(since, datetime.fromisoformat(first).timestamp()) if first else since
-    actual_days = max((now - period_start) / 86400, 1 / 24)
+    actual_days = max((now - period_start) / 86400, 1.0)
     per_day = s["ssh_attempts"] / actual_days
 
     def d(ts: float) -> str:
@@ -100,7 +101,7 @@ def render_markdown(
         out.append("| - | (none) | | 0 | 0 |")
     out.append("")
 
-    total = sum(c["count"] for c in countries) or 1
+    total = sum(c["count"] for c in all_countries) or 1
     out += ["#### Top source countries", "", "| # | Country | Events | Share | IPs |",
             "|---:|---|---:|---:|---:|"]  # fmt: skip
     for i, c in enumerate(countries, 1):
