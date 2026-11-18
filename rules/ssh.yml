@@ -1,0 +1,69 @@
+# SSH detection rules (sources: auth.log or journald).
+#
+# Event types: ssh_failed, ssh_invalid_user, ssh_accepted
+# Fields:      src_ip, user, method, port, invalid_user, host
+
+rules:
+  - id: ssh-bruteforce
+    name: SSH brute force
+    description: >
+      Many failed SSH password attempts from one address in a short time.
+      Typical of credential-guessing bots.
+    type: threshold
+    severity: high
+    match:
+      event_type: ssh_failed
+    group_by: src_ip
+    threshold: 5
+    window: 60
+    cooldown: 600
+    message: "SSH brute force from {key}: {count} failed logins in {window}s (last user: {user})"
+    mitre: [T1110.001]
+
+  - id: ssh-user-enumeration
+    name: SSH username enumeration
+    description: >
+      One address tries many *different* non-existent usernames. Also fires
+      on key-only servers where bots never get as far as a password prompt.
+    type: threshold
+    severity: medium
+    match:
+      event_type: ssh_invalid_user
+    group_by: src_ip
+    distinct: user
+    threshold: 8
+    window: 300
+    cooldown: 1800
+    message: "{key} tried {count} different invalid usernames in {window}s"
+    mitre: [T1110.003]
+
+  - id: ssh-login-after-failures
+    name: Successful SSH login after repeated failures
+    description: >
+      A successful login from an address that just failed several times.
+      Either a forgetful admin or a brute force that worked - always check.
+    type: sequence
+    severity: critical
+    match:
+      event_type: ssh_failed
+    followed_by:
+      event_type: ssh_accepted
+    group_by: src_ip
+    threshold: 5
+    window: 900
+    cooldown: 0
+    message: "Login as '{user}' from {key} succeeded after {count} failures"
+    mitre: [T1110.001, T1078]
+
+  - id: ssh-root-login
+    name: Successful SSH login as root
+    description: Direct root logins should normally be disabled (PermitRootLogin no).
+    type: pattern
+    severity: high
+    match:
+      event_type: ssh_accepted
+      user: root
+    group_by: src_ip
+    cooldown: 3600
+    message: "root logged in over SSH from {key}"
+    mitre: [T1078.003, T1021.004]

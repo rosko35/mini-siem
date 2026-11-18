@@ -1,0 +1,155 @@
+# Web detection rules (source: nginx combined access log).
+#
+# Event type: http_request
+# Fields:     src_ip, method, path, protocol, status, bytes, referer, user_agent
+#
+# Pattern values are URL-decoded up to three times before matching
+# (decode: true is the default), and the raw value is checked as well.
+
+rules:
+  - id: web-directory-scan
+    name: Web directory scanning (many 404s)
+    description: >
+      One client requests many different paths that do not exist.
+      Typical of dirbuster/gobuster style wordlist scanners.
+    type: threshold
+    severity: medium
+    match:
+      event_type: http_request
+      status: [404, 410]
+    group_by: src_ip
+    distinct: path
+    threshold: 20
+    window: 60
+    cooldown: 900
+    message: "{key} hit {count} distinct missing paths in {window}s"
+    mitre: [T1595.003]
+
+  - id: web-scanner-user-agent
+    name: Known scanner user-agent
+    type: pattern
+    severity: medium
+    match:
+      event_type: http_request
+    patterns:
+      - field: user_agent
+        decode: false
+        regex:
+          - "sqlmap"
+          - "nikto"
+          - "nmap scripting engine|\\bnmap\\b"
+          - "masscan"
+          - "zgrab"
+          - "nuclei"
+          - "wpscan"
+          - "dirbuster|gobuster|feroxbuster|\\bffuf\\b|wfuzz"
+          - "acunetix|netsparker|openvas|qualys"
+          - "whatweb|jaeles|commix|hydra"
+    group_by: src_ip
+    cooldown: 3600
+    message: "Scanner user-agent from {key}: {user_agent}"
+    mitre: [T1595.002]
+
+  - id: web-path-traversal
+    name: Path traversal attempt
+    type: pattern
+    severity: high
+    match:
+      event_type: http_request
+    patterns:
+      - field: path
+        regex:
+          - "\\.\\.[/\\\\]"
+          - "/etc/(passwd|shadow|group|hosts)\\b"
+          - "/proc/self/(environ|cmdline)"
+          - "(boot|win)\\.ini"
+          - "%c0%ae|%c0%af|%c1%9c|%e0%80%ae"   # overlong UTF-8 encodings of . and /
+    group_by: src_ip
+    cooldown: 600
+    message: "Path traversal probe from {key}: {path}"
+    mitre: [T1190, T1083]
+
+  - id: web-sqli-probe
+    name: SQL injection probe
+    type: pattern
+    severity: high
+    match:
+      event_type: http_request
+    patterns:
+      - field: path
+        regex:
+          - "union(\\s|/\\*.*?\\*/)+(all(\\s|/\\*.*?\\*/)+)?select"
+          - "'\\s*(or|and)\\s+'?\\w*'?\\s*="           # ' OR '1'='1
+          - "\\b(or|and)\\s+(\\d+)\\s*=\\s*\\2\\b"     # OR 1=1
+          - "\\b(sleep|benchmark|pg_sleep)\\s*\\("
+          - "waitfor\\s+delay"
+          - "information_schema"
+          - "'\\s*(--|#)"
+    group_by: src_ip
+    cooldown: 600
+    message: "SQL injection probe from {key}: {path}"
+    mitre: [T1190]
+
+  - id: web-xss-probe
+    name: Cross-site scripting probe
+    type: pattern
+    severity: medium
+    match:
+      event_type: http_request
+    patterns:
+      - field: path
+        regex:
+          - "<\\s*script"
+          - "javascript\\s*:"
+          - "\\bon(error|load|mouseover|focus)\\s*="
+          - "<\\s*(svg|iframe|img)\\b"
+    group_by: src_ip
+    cooldown: 600
+    message: "XSS probe from {key}: {path}"
+    mitre: [T1190]
+
+  - id: web-sensitive-file-probe
+    name: Sensitive file probe
+    description: Requests for secrets and config files that should never be public.
+    type: pattern
+    severity: medium
+    match:
+      event_type: http_request
+    patterns:
+      - field: path
+        regex:
+          - "/\\.env(\\.\\w+)?(\\?|$)"
+          - "/\\.git/(config|HEAD)"
+          - "/\\.(aws|ssh|docker)/"
+          - "/\\.htpasswd"
+          - "wp-config\\.php"
+          - "/id_(rsa|ed25519)"
+          - "phpinfo\\.php"
+    group_by: src_ip
+    cooldown: 1800
+    message: "{key} probed for sensitive file {path}"
+    mitre: [T1595.003, T1552.001]
+
+  - id: web-rce-probe
+    name: Remote code execution probe
+    description: Shell metacharacters, Log4Shell JNDI lookups and similar payloads.
+    type: pattern
+    severity: high
+    match:
+      event_type: http_request
+    patterns:
+      - field: path
+        regex:
+          - "\\$\\{jndi:"
+          - "[;|`]\\s*(wget|curl|sh|bash|nc)\\b"
+          - "\\$\\((wget|curl|id|whoami)"
+          - "/bin/(ba)?sh"
+          - "cgi-bin/.*(\\.\\./|%2e%2e)"
+      - field: user_agent
+        regex:
+          - "\\$\\{jndi:"
+          - "\\(\\)\\s*\\{\\s*:;\\s*\\}"   # Shellshock
+    group_by: src_ip
+    cooldown: 600
+    message: "RCE probe from {key}: {match}"
+    mitre: [T1190, T1059]

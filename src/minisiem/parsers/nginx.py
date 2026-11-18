@@ -18,7 +18,7 @@ from ..models import Event, EventType
 
 _COMBINED = re.compile(
     r'^(?P<ip>\S+) \S+ (?P<ruser>\S+) \[(?P<time>[^\]]+)\] "(?P<request>(?:[^"\\]|\\.)*)" '
-    r'(?P<status>\d{3}) (?P<bytes>\d+|-)'
+    r"(?P<status>\d{3}) (?P<bytes>\d+|-)"
     r'(?: "(?P<referer>(?:[^"\\]|\\.)*)" "(?P<ua>(?:[^"\\]|\\.)*)")?'
 )
 _TIME_FMT = "%d/%b/%Y:%H:%M:%S %z"

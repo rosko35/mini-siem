@@ -270,6 +270,7 @@ class JournaldSource:
                 if proc.returncode is None:
                     proc.terminate()
                     await proc.wait()
-            log.warning("journalctl exited (%s), restarting in %.0fs", proc.returncode,
-                        self.restart_delay)
+            log.warning(
+                "journalctl exited (%s), restarting in %.0fs", proc.returncode, self.restart_delay
+            )
             await asyncio.sleep(self.restart_delay)

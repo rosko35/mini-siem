@@ -83,9 +83,7 @@ class TestAuthLog:
 
     def test_year_rollover(self):
         parser = AuthLogParser(tz=UTC, now=datetime(2027, 1, 1, 0, 5, tzinfo=UTC))
-        ev = parser.parse(
-            "Dec 31 23:59:58 web1 sshd[1]: Invalid user a from 203.0.113.9 port 1"
-        )
+        ev = parser.parse("Dec 31 23:59:58 web1 sshd[1]: Invalid user a from 203.0.113.9 port 1")
         assert ev.ts.year == 2026
 
     @pytest.mark.parametrize(
@@ -143,9 +141,7 @@ class TestNginx:
         assert ev.fields["referer"] == "https://example.org/"
 
     def test_trailing_custom_fields_ignored(self):
-        line = (
-            '192.0.2.1 - - [18/Nov/2026:10:20:31 +0000] "GET / HTTP/1.1" 200 612 "-" "ua" 0.004'
-        )
+        line = '192.0.2.1 - - [18/Nov/2026:10:20:31 +0000] "GET / HTTP/1.1" 200 612 "-" "ua" 0.004'
         assert NginxParser().parse(line).fields["status"] == 200
 
     def test_garbage(self):
