@@ -1,0 +1,16 @@
+# FAKE country labels for the demo. All addresses produced by
+# tools/generate_logs.py come from the documentation ranges reserved by
+# RFC 5737 / RFC 3849, which belong to nobody and never geolocate. This file
+# pins them to countries so the attack map has something to show.
+networks:
+  203.0.113.0/27: CN
+  203.0.113.32/27: RU
+  203.0.113.64/27: US
+  203.0.113.96/27: BR
+  203.0.113.128/27: NL
+  203.0.113.160/27: VN
+  203.0.113.192/27: IN
+  203.0.113.224/27: DE
+  198.51.100.0/25: KR
+  198.51.100.128/25: ID
+  "2001:db8::/32": FR

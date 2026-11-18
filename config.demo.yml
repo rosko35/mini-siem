@@ -1,0 +1,35 @@
+# Demo configuration: reads the logs written by tools/generate_logs.py.
+#   python tools/generate_logs.py --out demo/logs
+#   siem -c config.demo.yml run
+
+database: data/demo.db
+rules: rules
+retention_days: 30
+log_timezone: UTC
+store_all_http: false
+ignore_networks: []
+poll_interval: 0.5
+
+sources:
+  - type: file
+    path: demo/logs/auth.log
+    parser: auth
+    from_beginning: true
+  - type: file
+    path: demo/logs/access.log
+    parser: nginx
+    from_beginning: true
+
+geoip:
+  database: null
+  # Documentation address ranges never geolocate, so the demo labels them by hand.
+  static_map: demo/demo-geo.yml
+
+dashboard:
+  host: 127.0.0.1
+  port: 8080
+
+telegram:
+  min_severity: high
+  batch_interval: 10
+  max_alerts_per_message: 10

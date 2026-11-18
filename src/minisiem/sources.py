@@ -90,7 +90,11 @@ class FileTailer:
         self._done = (0, 0)  # (inode, offset) just after the last consumed line
 
     # -- state -------------------------------------------------------------
-    def state(self) -> SourceState:
+    def state(self) -> SourceState | None:
+        """Position to persist, or None before the file was first opened (nothing to save
+        yet; saving a placeholder would clobber the real offset from the last run)."""
+        if self._inode is None:
+            return None
         return SourceState(self.key, self._done[0], self._done[1])
 
     def _initialise(self, st: os.stat_result) -> list[Entry]:
@@ -237,8 +241,8 @@ class JournaldSource:
         saved = store.load_state(self.key) if store else None
         self.cursor: str | None = saved.cursor if saved else None
 
-    def state(self) -> SourceState:
-        return SourceState(self.key, cursor=self.cursor)
+    def state(self) -> SourceState | None:
+        return SourceState(self.key, cursor=self.cursor) if self.cursor else None
 
     def command(self) -> list[str]:
         cmd = [self.journalctl, "--follow", "--output=json", "--no-pager"]

@@ -1,0 +1,51 @@
+# mini-siem configuration for a real server.
+# Relative paths are resolved against the directory of this file.
+# Secrets (Telegram, dashboard credentials) live in the environment / .env, never here.
+
+database: data/siem.db
+rules: rules
+
+# Events and alerts older than this are deleted (hourly). Attacker IP addresses
+# can be personal data, so keep this as short as is useful to you.
+retention_days: 30
+
+# Timezone of classic syslog timestamps ("Nov 18 10:15:01" carries none).
+# "local" uses the timezone of the machine/container running mini-siem.
+# Lines with RFC 3339 timestamps carry their own offset and ignore this.
+log_timezone: local
+
+# Store every HTTP request, or only suspicious ones (4xx probes, rule hits)?
+store_all_http: false
+
+# Your own addresses: never alert on them. CIDR notation is fine.
+ignore_networks: []
+#  - 192.0.2.10/32
+
+poll_interval: 1.0
+
+sources:
+  - type: file
+    path: /var/log/auth.log
+    parser: auth
+  - type: file
+    path: /var/log/nginx/access.log
+    parser: nginx
+  # No /var/log/auth.log (Debian 12 minimal, Fedora, Arch)? Read sshd from journald instead.
+  # Needs journalctl in the runtime, so this is for the systemd install, not Docker.
+  # - type: journald
+  #   identifiers: [sshd, sshd-session]
+
+geoip:
+  # MaxMind GeoLite2-Country/City or DB-IP "IP to Country Lite" (.mmdb).
+  # Not bundled. See README "GeoIP". Missing file = countries shown as unknown.
+  database: /var/lib/GeoIP/GeoLite2-Country.mmdb
+  static_map: null
+
+dashboard:
+  host: 127.0.0.1
+  port: 8080
+
+telegram:
+  min_severity: medium      # low | medium | high | critical
+  batch_interval: 10        # seconds; at most one message per interval
+  max_alerts_per_message: 10
