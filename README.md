@@ -30,7 +30,9 @@ public port and runs with tight CPU and memory limits.
   (create and copytruncate modes) and resumes from a saved offset after a
   restart; optional `journalctl -f -o json` source for distributions without
   `/var/log/auth.log`.
-- **Parsers** - sshd (failed password, invalid user, accepted login; classic
+- **Parsers** - sshd (failed password, invalid user, accepted login, and
+  pre-auth disconnects "authenticating user ... [preauth]", which are the only
+  trace of a brute force on key-only servers; classic
   syslog *and* RFC 3339 timestamps; OpenSSH 9.8+ `sshd-session`), nginx
   combined access log (IPv4/IPv6, malformed requests).
 - **Detection rules in YAML** with a validated schema: sliding-window

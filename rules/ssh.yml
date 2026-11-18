@@ -8,7 +8,9 @@ rules:
     name: SSH brute force
     description: >
       Many failed SSH password attempts from one address in a short time.
-      Typical of credential-guessing bots.
+      Typical of credential-guessing bots. On key-only servers (no "Failed
+      password" lines) it counts "authenticating user ... [preauth]"
+      disconnects instead.
     type: threshold
     severity: high
     match:

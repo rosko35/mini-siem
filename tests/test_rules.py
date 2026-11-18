@@ -5,7 +5,7 @@ import pytest
 
 from minisiem.detection import RuleEngine, RuleError, load_rules
 from minisiem.models import Event, EventType, Severity
-from minisiem.parsers import NginxParser
+from minisiem.parsers import AuthLogParser, NginxParser
 
 ROOT = Path(__file__).resolve().parent.parent
 T0 = datetime(2026, 11, 18, 10, 0, 0, tzinfo=UTC)
@@ -83,6 +83,31 @@ def test_duplicate_ids_rejected(tmp_path):
 
 
 # --- threshold windows ------------------------------------------------------
+
+
+def test_ssh_bruteforce_fires_on_preauth_disconnects_key_only_server(engine):
+    parser = AuthLogParser(tz=UTC, now=T0)
+    lines = [
+        f"Nov 18 10:00:{i * 10:02d} web1 sshd-session[{100 + i}]: {text} authenticating user "
+        f"root 203.0.113.5 port {40000 + i} [preauth]"
+        for i, text in enumerate(
+            [
+                "Connection closed by",
+                "Disconnected from",
+                "Connection reset by",
+                "Connection closed by",
+                "Disconnected from",
+            ]
+        )
+    ]
+    alerts = []
+    for line in lines:
+        ev = parser.parse(line)
+        assert ev is not None, line
+        alerts += engine.process(ev)
+    assert [a.rule_id for a in alerts] == ["ssh-bruteforce"]
+    assert alerts[0].key == "203.0.113.5"
+    assert alerts[0].count == 5
 
 
 def test_ssh_bruteforce_fires_on_fifth_failure_within_60s(engine):

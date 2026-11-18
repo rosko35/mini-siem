@@ -87,12 +87,63 @@ class TestAuthLog:
         assert ev.ts.year == 2026
 
     @pytest.mark.parametrize(
+        "text",
+        [
+            "Connection closed by authenticating user root 203.0.113.5 port 51234 [preauth]",
+            "Disconnected from authenticating user root 203.0.113.5 port 51234 [preauth]",
+            "Connection reset by authenticating user root 203.0.113.5 port 51234 [preauth]",
+        ],
+    )
+    @pytest.mark.parametrize("prog", ["sshd", "sshd-session"])
+    def test_preauth_authenticating_user_classic(self, auth, text, prog):
+        ev = auth.parse(f"Nov 18 10:15:01 web1 {prog}[1234]: {text}")
+        assert ev is not None
+        assert ev.type == EventType.SSH_FAILED
+        assert ev.src_ip == "203.0.113.5"
+        assert ev.user == "root"
+        assert ev.host == "web1"
+        assert ev.fields == {"method": "preauth", "port": 51234, "invalid_user": False}
+
+    def test_preauth_authenticating_user_rfc3339_ipv6(self, auth):
+        ev = auth.parse(
+            "2026-11-18T10:15:01.482911+03:00 web1 sshd-session[4410]: Connection reset by "
+            "authenticating user admin 2001:db8::1f port 40022 [preauth]"
+        )
+        assert ev.type == EventType.SSH_FAILED
+        assert (ev.user, ev.src_ip) == ("admin", "2001:db8::1f")
+        assert ev.ts.utcoffset() == timedelta(hours=3)
+
+    def test_preauth_invalid_user_close_is_not_a_second_attempt(self, auth):
+        lines = [
+            "Nov 18 10:15:00 web1 sshd[77]: Invalid user foo from 203.0.113.5 port 1",
+            "Nov 18 10:15:01 web1 sshd[77]: Connection closed by invalid user foo "
+            "203.0.113.5 port 1 [preauth]",
+            "Nov 18 10:15:01 web1 sshd[77]: Disconnected from invalid user foo "
+            "203.0.113.5 port 1 [preauth]",
+        ]
+        events = [auth.parse(line) for line in lines]
+        assert [e.type if e else None for e in events] == [EventType.SSH_INVALID_USER, None, None]
+
+    def test_preauth_after_failed_password_same_pid_not_double_counted(self, auth):
+        lines = [
+            "Nov 18 10:15:00 web1 sshd[88]: Failed password for root from 203.0.113.5 port 2 ssh2",
+            "Nov 18 10:15:02 web1 sshd[88]: Disconnected from authenticating user root "
+            "203.0.113.5 port 2 [preauth]",
+            "Nov 18 10:15:03 web1 sshd[89]: Connection closed by authenticating user root "
+            "203.0.113.5 port 3 [preauth]",
+        ]
+        events = [auth.parse(line) for line in lines]
+        assert [e is not None for e in events] == [True, False, True]
+
+    @pytest.mark.parametrize(
         "line",
         [
             "Nov 18 10:17:01 web1 CRON[3000]: pam_unix(cron:session): session opened for user root",
             "Nov 18 10:17:01 web1 sudo:     emre : TTY=pts/0 ; PWD=/home/emre ; COMMAND=/bin/ls",
             "Nov 18 10:15:01 web1 sshd[2231]: Received disconnect from 203.0.113.7 port 1:11: Bye",
             "Nov 18 10:15:01 web1 notsshd[1]: Failed password for root from 1.2.3.4 port 1 ssh2",
+            "Nov 18 10:15:01 web1 sshd[1]: Connection closed by 203.0.113.7 port 1 [preauth]",
+            "Nov 18 10:15:01 web1 sshd[1]: Disconnected from user emre 192.0.2.10 port 1",
             "complete garbage",
             "",
         ],
@@ -172,6 +223,19 @@ class TestJournald:
         msg = list(b"Invalid user \xff from 203.0.113.7 port 1")
         ev = JournaldParser().parse(self.record(MESSAGE=msg, SYSLOG_IDENTIFIER="sshd-session"))
         assert ev.type == EventType.SSH_INVALID_USER
+
+    def test_preauth_authenticating_user(self):
+        msg = "Connection closed by authenticating user root 203.0.113.5 port 51234 [preauth]"
+        ev = JournaldParser().parse(self.record(MESSAGE=msg, SYSLOG_IDENTIFIER="sshd-session"))
+        assert ev.type == EventType.SSH_FAILED
+        assert (ev.user, ev.src_ip, ev.fields["method"]) == ("root", "203.0.113.5", "preauth")
+
+    def test_preauth_not_double_counted_after_failed_password(self):
+        parser = JournaldParser()
+        assert parser.parse(self.record(_PID="55")) is not None
+        msg = "Disconnected from authenticating user root 203.0.113.7 port 52144 [preauth]"
+        assert parser.parse(self.record(MESSAGE=msg, _PID="55")) is None
+        assert parser.parse(self.record(MESSAGE=msg, _PID="56")) is not None
 
     def test_other_identifier_ignored(self):
         assert JournaldParser().parse(self.record(SYSLOG_IDENTIFIER="systemd")) is None

@@ -8,11 +8,21 @@ Two timestamp layouts are supported:
 
 OpenSSH 9.8+ logs from the ``sshd-session`` binary instead of ``sshd``,
 so both program names are accepted.
+
+Servers with password authentication disabled never log "Failed password";
+a bot probing an existing account only leaves ``Connection closed by
+authenticating user root 1.2.3.4 port 1 [preauth]`` (or "Disconnected from" /
+"Connection reset by"). Those lines are reported as ``ssh_failed`` with
+``method == "preauth"``. The "... by invalid user X ..." variants are ignored,
+because the "Invalid user X from ..." line already counts that attempt, and a
+preauth close from a connection that already logged a failure (same sshd pid)
+is dropped so password-auth servers do not count one attempt twice.
 """
 
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from datetime import datetime, timedelta, tzinfo
 
 from ..models import Event, EventType
@@ -34,6 +44,10 @@ _FAILED = re.compile(
 )
 _INVALID = re.compile(
     r"^Invalid user (?P<user>.*?) from (?P<ip>[0-9A-Fa-f:.]+)(?: port (?P<port>\d+))?\s*$"
+)
+_PREAUTH = re.compile(
+    r"^(?:Connection closed by|Disconnected from|Connection reset by) authenticating user "
+    r"(?P<user>.*?) (?P<ip>[0-9A-Fa-f:.]+) port (?P<port>\d+) \[preauth\]\s*$"
 )
 _ACCEPTED = re.compile(
     r"^Accepted (?P<method>\S+) for (?P<user>\S+) from (?P<ip>[0-9A-Fa-f:.]+) "
@@ -65,11 +79,55 @@ def parse_classic_ts(mon: str, day: str, clock: str, tz: tzinfo, now: datetime) 
     return ts
 
 
+class AttemptTracker:
+    """Remembers which sshd connections (host + pid) already logged a failure."""
+
+    def __init__(self, size: int = 4096) -> None:
+        self._seen: OrderedDict[tuple[str | None, str], None] = OrderedDict()
+        self._size = size
+
+    def add(self, host: str | None, pid: str) -> None:
+        self._seen[(host, pid)] = None
+        self._seen.move_to_end((host, pid))
+        while len(self._seen) > self._size:
+            self._seen.popitem(last=False)
+
+    def __contains__(self, key: tuple[str | None, str]) -> bool:
+        return key in self._seen
+
+
 def parse_sshd_message(
-    msg: str, ts: datetime, host: str | None, source: str, raw: str
+    msg: str,
+    ts: datetime,
+    host: str | None,
+    source: str,
+    raw: str,
+    pid: str | None = None,
+    tracker: AttemptTracker | None = None,
 ) -> Event | None:
     """Turn the message part of an sshd log line into an Event (or None)."""
-    msg = msg.strip()
+    event = _parse_message(msg.strip(), ts, host, source, raw)
+    if event is None or pid is None or tracker is None:
+        return event
+    if event.fields.get("method") == "preauth":
+        return None if (host, pid) in tracker else event
+    if event.type in EventType.SSH_FAILURES:
+        tracker.add(host, pid)
+    return event
+
+
+def _parse_message(msg: str, ts: datetime, host: str | None, source: str, raw: str) -> Event | None:
+    if m := _PREAUTH.match(msg):
+        return Event(
+            ts=ts,
+            source=source,
+            type=EventType.SSH_FAILED,
+            src_ip=m["ip"],
+            user=m["user"],
+            host=host,
+            fields={"method": "preauth", "port": int(m["port"]), "invalid_user": False},
+            raw=raw,
+        )
     if m := _FAILED.match(msg):
         return Event(
             ts=ts,
@@ -116,6 +174,7 @@ class AuthLogParser:
     def __init__(self, tz: tzinfo | None = None, now: datetime | None = None) -> None:
         self.tz = tz or _local_tz()
         self._fixed_now = now
+        self._tracker = AttemptTracker()
 
     def parse(self, line: str) -> Event | None:
         line = line.rstrip("\r\n")
@@ -136,4 +195,6 @@ class AuthLogParser:
             return None
         if m["prog"] not in _SSHD_PROGRAMS:
             return None
-        return parse_sshd_message(m["msg"], ts, m["host"], self.name, line)
+        return parse_sshd_message(
+            m["msg"], ts, m["host"], self.name, line, pid=m["pid"], tracker=self._tracker
+        )

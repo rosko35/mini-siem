@@ -12,13 +12,16 @@ import json
 from datetime import UTC, datetime
 
 from ..models import Event
-from .auth import parse_sshd_message
+from .auth import AttemptTracker, parse_sshd_message
 
 _SSHD_IDENTIFIERS = frozenset({"sshd", "sshd-session"})
 
 
 class JournaldParser:
     name = "journald"
+
+    def __init__(self) -> None:
+        self._tracker = AttemptTracker()
 
     def parse(self, line: str) -> Event | None:
         try:
@@ -39,7 +42,16 @@ class JournaldParser:
             ts = datetime.fromtimestamp(int(record["__REALTIME_TIMESTAMP"]) / 1_000_000, tz=UTC)
         except (KeyError, ValueError, TypeError):
             return None
-        event = parse_sshd_message(message, ts, record.get("_HOSTNAME"), self.name, message)
+        pid = record.get("_PID") or record.get("SYSLOG_PID")
+        event = parse_sshd_message(
+            message,
+            ts,
+            record.get("_HOSTNAME"),
+            self.name,
+            message,
+            pid=str(pid) if pid else None,
+            tracker=self._tracker,
+        )
         if event is not None and record.get("__CURSOR"):
             event.fields["cursor"] = record["__CURSOR"]
         return event

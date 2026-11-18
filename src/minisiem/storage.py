@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS meta (
 
 # One SSH login attempt. With password auth OpenSSH logs both "Invalid user X" and
 # "Failed password for invalid user X" for the same attempt, so the latter is skipped;
-# key-only servers only log the former.
+# key-only servers only log the former, plus "authenticating user ... [preauth]"
+# disconnects for existing accounts (stored as ssh_failed with method "preauth").
 SSH_ATTEMPT = (
     "(type = 'ssh_invalid_user' OR (type = 'ssh_failed'"
     " AND COALESCE(json_extract(fields, '$.invalid_user'), 0) = 0))"
