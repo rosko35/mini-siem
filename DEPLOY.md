@@ -1,5 +1,7 @@
 # Deploying mini-siem on a VPS
 
+🇹🇷 [Türkçe](DEPLOY.tr.md)
+
 This guide assumes a Debian/Ubuntu VPS that already serves a production
 website through nginx. mini-siem is designed to be a **passive, read-only
 guest** on that machine:
@@ -54,7 +56,7 @@ Requires Docker Engine with Compose v2.24 or newer (`docker compose version`).
 
 ```bash
 # 1. Get the code (as your normal user)
-git clone https://github.com/<you>/mini-siem.git ~/mini-siem
+git clone https://github.com/rosko35/mini-siem.git ~/mini-siem
 cd ~/mini-siem
 
 # 2. Secrets
@@ -103,7 +105,7 @@ Requires Python 3.11+ (Debian 12, Ubuntu 24.04). On Ubuntu 22.04 (Python
 
 ```bash
 sudo apt install python3-venv            # if not already present
-git clone https://github.com/<you>/mini-siem.git
+git clone https://github.com/rosko35/mini-siem.git
 cd mini-siem
 sudo ./deploy/install.sh                 # installs, does not start yet
 sudo nano /etc/mini-siem/config.yml      # paths, ignore_networks, retention

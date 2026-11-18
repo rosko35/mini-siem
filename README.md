@@ -1,5 +1,7 @@
 # mini-siem
 
+🇹🇷 [Türkçe](README.tr.md)
+
 [![CI](https://github.com/rosko35/mini-siem/actions/workflows/ci.yml/badge.svg)](https://github.com/rosko35/mini-siem/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
