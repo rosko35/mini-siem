@@ -1,0 +1,44 @@
+# Local demo: fake logs + monitor + dashboard. No host logs are read.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   open http://127.0.0.1:8080
+
+services:
+  generator:
+    build: .
+    image: mini-siem:latest
+    entrypoint: ["python", "/app/tools/generate_logs.py"]
+    command: ["--out", "/app/demo/logs", "--hours", "24", "--follow", "--speed", "20"]
+    volumes:
+      - demo-logs:/app/demo/logs
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+
+  siem:
+    build: .                # same image as the generator; the second build is a cache hit
+    image: mini-siem:latest
+    depends_on:
+      - generator
+    command: ["run"]
+    environment:
+      SIEM_CONFIG: /app/config.demo.yml
+      SIEM_DB: /data/demo.db
+      SIEM_DASHBOARD_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - demo-logs:/app/demo/logs:ro
+      - demo-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  demo-logs:
+  demo-data:

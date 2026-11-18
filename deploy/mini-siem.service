@@ -1,0 +1,58 @@
+# systemd unit for the non-Docker install (see deploy/install.sh and DEPLOY.md).
+# The service can read /var/log (group adm), write only /var/lib/mini-siem,
+# and listens on 127.0.0.1 only (configured in /etc/mini-siem/config.yml).
+
+[Unit]
+Description=mini-siem log monitoring and intrusion detection
+Documentation=file:///opt/mini-siem/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=minisiem
+Group=minisiem
+SupplementaryGroups=adm
+WorkingDirectory=/var/lib/mini-siem
+Environment=SIEM_CONFIG=/etc/mini-siem/config.yml
+EnvironmentFile=-/etc/mini-siem/env
+ExecStart=/opt/mini-siem/venv/bin/siem run
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# Resource limits: never compete with the production website.
+Nice=10
+CPUQuota=50%
+MemoryMax=300M
+TasksMax=64
+
+# Sandboxing
+StateDirectory=mini-siem
+StateDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadOnlyPaths=/var/log /etc/mini-siem /opt/mini-siem
+
+[Install]
+WantedBy=multi-user.target

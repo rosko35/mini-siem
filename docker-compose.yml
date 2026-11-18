@@ -1,0 +1,51 @@
+# Production deployment on the VPS. See DEPLOY.md.
+#
+# What this container can and cannot do on the host:
+#   - reads /var/log (read-only bind mount); writes only to its own named volume
+#   - no published public port: the dashboard is on 127.0.0.1:8080 of the host only
+#   - no host networking, no capabilities, no privilege escalation, read-only root fs
+#   - never touches nginx, sshd, the firewall or any other service
+
+services:
+  siem:
+    build: .
+    image: mini-siem:latest
+    container_name: mini-siem
+    restart: unless-stopped
+    command: ["run"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SIEM_CONFIG: /app/config.yml
+      SIEM_DB: /data/siem.db
+      SIEM_DASHBOARD_HOST: 0.0.0.0   # inside the container; published on host loopback below
+      SIEM_HOSTNAME: ${SIEM_HOSTNAME:-vps}
+    ports:
+      - "127.0.0.1:8080:8080"
+    group_add:
+      - "4"   # adm: read access to auth.log and nginx logs
+    volumes:
+      - /var/log:/var/log:ro
+      - /etc/localtime:/etc/localtime:ro          # classic syslog timestamps are host local time
+      - ./config.yml:/app/config.yml:ro
+      - ./rules:/app/rules:ro
+      - ./geoip:/var/lib/GeoIP:ro                 # optional GeoLite2-Country.mmdb goes here
+      - siem-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  siem-data:
